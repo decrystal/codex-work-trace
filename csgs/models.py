@@ -13,3 +13,6 @@ class Run:
     summary: str
     tags: list[str] = field(default_factory=list)
     created_at: str | None = None
+    device_id: str | None = None
+    updated_at: str | None = None
+    sync_state: str | None = None

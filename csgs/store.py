@@ -20,6 +20,12 @@ CREATE TABLE IF NOT EXISTS runs (
 );
 """
 
+MIGRATIONS = {
+    "device_id": "ALTER TABLE runs ADD COLUMN device_id TEXT",
+    "updated_at": "ALTER TABLE runs ADD COLUMN updated_at TIMESTAMP",
+    "sync_state": "ALTER TABLE runs ADD COLUMN sync_state TEXT DEFAULT 'local'",
+}
+
 
 class RunStore:
     def __init__(self, db_path: str | Path):
@@ -29,6 +35,7 @@ class RunStore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
             conn.executescript(SCHEMA_SQL)
+            self._migrate_schema(conn)
 
     def create_run(self, run: Run) -> Run:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -36,8 +43,11 @@ class RunStore:
             if run.created_at is None:
                 conn.execute(
                     """
-                    INSERT INTO runs (id, parent_id, project, prompt, output, summary, tags)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO runs (
+                        id, parent_id, project, prompt, output, summary, tags,
+                        device_id, sync_state, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     """,
                     (
                         run.id,
@@ -47,13 +57,18 @@ class RunStore:
                         run.output,
                         run.summary,
                         self._serialize_tags(run.tags),
+                        run.device_id,
+                        run.sync_state or "local",
                     ),
                 )
             else:
                 conn.execute(
                     """
-                    INSERT INTO runs (id, parent_id, project, prompt, output, summary, tags, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO runs (
+                        id, parent_id, project, prompt, output, summary, tags,
+                        created_at, device_id, sync_state, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))
                     """,
                     (
                         run.id,
@@ -64,6 +79,9 @@ class RunStore:
                         run.summary,
                         self._serialize_tags(run.tags),
                         run.created_at,
+                        run.device_id,
+                        run.sync_state or "local",
+                        run.updated_at,
                     ),
                 )
 
@@ -89,6 +107,14 @@ class RunStore:
             rows = conn.execute(
                 "SELECT * FROM runs WHERE parent_id = ? ORDER BY created_at, id",
                 (parent_id,),
+            ).fetchall()
+        return [self._row_to_run(row) for row in rows]
+
+    def list_project_runs(self, project: str) -> list[Run]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM runs WHERE project = ? ORDER BY created_at, id",
+                (project,),
             ).fetchall()
         return [self._row_to_run(row) for row in rows]
 
@@ -119,6 +145,13 @@ class RunStore:
         return conn
 
     @staticmethod
+    def _migrate_schema(conn: sqlite3.Connection) -> None:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(runs)").fetchall()}
+        for column, statement in MIGRATIONS.items():
+            if column not in columns:
+                conn.execute(statement)
+
+    @staticmethod
     def _serialize_tags(tags: list[str]) -> str:
         return ",".join(tag.strip() for tag in tags if tag.strip())
 
@@ -139,4 +172,7 @@ class RunStore:
             summary=row["summary"],
             tags=cls._deserialize_tags(row["tags"]),
             created_at=row["created_at"],
+            device_id=row["device_id"],
+            updated_at=row["updated_at"],
+            sync_state=row["sync_state"],
         )
