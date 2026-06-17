@@ -77,6 +77,10 @@ def create_mcp_app():
     app.tool()(trace_run)
     app.tool()(fork_run)
 
+    from csgs.http_api import register_api_routes
+
+    register_api_routes(app)
+
     return app
 
 
