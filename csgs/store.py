@@ -79,6 +79,40 @@ class RunStore:
             return None
         return self._row_to_run(row)
 
+    def list_runs(self) -> list[Run]:
+        with self._connect() as conn:
+            rows = conn.execute("SELECT * FROM runs ORDER BY created_at, id").fetchall()
+        return [self._row_to_run(row) for row in rows]
+
+    def get_children(self, parent_id: str) -> list[Run]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM runs WHERE parent_id = ? ORDER BY created_at, id",
+                (parent_id,),
+            ).fetchall()
+        return [self._row_to_run(row) for row in rows]
+
+    def search_runs(
+        self,
+        text: str | None = None,
+        tags: list[str] | None = None,
+        project: str | None = None,
+    ) -> list[Run]:
+        runs = self.list_runs()
+        if project is not None:
+            runs = [run for run in runs if run.project == project]
+        if text:
+            needle = text.lower()
+            runs = [
+                run
+                for run in runs
+                if needle in run.prompt.lower() or needle in run.summary.lower()
+            ]
+        if tags:
+            required = set(tags)
+            runs = [run for run in runs if required.issubset(set(run.tags))]
+        return runs
+
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
