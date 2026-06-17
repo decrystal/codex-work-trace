@@ -34,3 +34,28 @@ def test_mcp_server_main_handles_keyboard_interrupt(monkeypatch):
     result = mcp_server.main(["--transport", "streamable-http"])
 
     assert result == 130
+
+
+def test_mcp_session_tools_log_and_append_turn(tmp_path, monkeypatch):
+    monkeypatch.setenv("CSGS_DB", str(tmp_path / "csgs.sqlite3"))
+
+    created = asyncio.run(
+        mcp_server.log_session(
+            project="alpha",
+            turns=[{"prompt": "Design session model", "output": "Added session and turn tables"}],
+            session_id="S_001",
+            title="Session model",
+        )
+    )
+    appended = asyncio.run(
+        mcp_server.append_turn(
+            session_id="S_001",
+            prompt="Append cheaply",
+            output="Use old summary plus new turn summary",
+        )
+    )
+    fetched = asyncio.run(mcp_server.get_session("S_001"))
+
+    assert created["id"] == "S_001"
+    assert appended["turn_index"] == 2
+    assert fetched["summary_turn_index"] == 2

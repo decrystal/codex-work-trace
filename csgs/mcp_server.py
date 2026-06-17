@@ -11,6 +11,7 @@ from csgs.cli import DEFAULT_DB, _run_to_dict
 from csgs.models import Run
 from csgs.service import SessionGraphService
 from csgs.store import RunStore
+from csgs.sync import session_to_dict, turn_to_dict
 
 
 INSTRUCTIONS = (
@@ -66,6 +67,37 @@ async def fork_run(
     return _run_to_dict(run)
 
 
+async def log_session(
+    project: str | None,
+    turns: list[dict[str, str]],
+    parent_id: str | None = None,
+    tags: list[str] | None = None,
+    session_id: str | None = None,
+    title: str | None = None,
+) -> dict[str, object]:
+    session = _service().log_session(
+        project=project,
+        turns=turns,
+        parent_id=parent_id,
+        tags=tags,
+        session_id=session_id,
+        title=title,
+    )
+    return session_to_dict(session)
+
+
+async def append_turn(session_id: str, prompt: str, output: str) -> dict[str, object]:
+    return turn_to_dict(_service().append_turn(session_id, prompt=prompt, output=output))
+
+
+async def get_session(id: str) -> dict[str, object]:
+    return session_to_dict(_service().get_session(id))
+
+
+async def trace_session(id: str) -> str:
+    return _service().trace_session(id)
+
+
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 DEFAULT_MCP_PATH = "/mcp"
@@ -89,6 +121,10 @@ def create_mcp_app(host: str | None = None, port: int | None = None):
     app.tool()(get_run)
     app.tool()(trace_run)
     app.tool()(fork_run)
+    app.tool()(log_session)
+    app.tool()(append_turn)
+    app.tool()(get_session)
+    app.tool()(trace_session)
 
     from csgs.http_api import register_api_routes
 

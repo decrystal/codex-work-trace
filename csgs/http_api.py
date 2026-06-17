@@ -8,7 +8,7 @@ from starlette.responses import JSONResponse, PlainTextResponse, Response
 
 from csgs.errors import CSGSError
 from csgs.mcp_server import _db_path, _service
-from csgs.sync import export_project, import_runs, run_to_dict
+from csgs.sync import export_project, import_runs, run_to_dict, session_to_dict, turn_to_dict
 
 
 def register_api_routes(app: Any) -> None:
@@ -30,6 +30,60 @@ def register_api_routes(app: Any) -> None:
             )
             return JSONResponse(run_to_dict(run))
         except (CSGSError, ValueError, KeyError) as exc:
+            return _error_response(exc)
+
+    @app.custom_route("/api/sessions", methods=["POST"])
+    async def create_session(request: Request) -> Response:
+        try:
+            data = await _json_body(request)
+            turns = data.get("turns", [])
+            if not isinstance(turns, list):
+                raise ValueError("turns must be a list")
+            session = _service().log_session(
+                project=_optional_str(data.get("project")),
+                title=_optional_str(data.get("title")),
+                parent_id=_optional_str(data.get("parent_id")),
+                tags=_tags(data.get("tags")),
+                session_id=_optional_str(data.get("id") or data.get("session_id")),
+                turns=[_turn_input(turn) for turn in turns],
+            )
+            return JSONResponse(session_to_dict(session))
+        except (CSGSError, ValueError, KeyError) as exc:
+            return _error_response(exc)
+
+    @app.custom_route("/api/sessions/{session_id}", methods=["GET"])
+    async def get_session(request: Request) -> Response:
+        try:
+            return JSONResponse(session_to_dict(_service().get_session(request.path_params["session_id"])))
+        except CSGSError as exc:
+            return _error_response(exc)
+
+    @app.custom_route("/api/sessions/{session_id}/turns", methods=["GET"])
+    async def list_session_turns(request: Request) -> Response:
+        try:
+            turns = _service().list_turns(request.path_params["session_id"])
+            return JSONResponse([turn_to_dict(turn) for turn in turns])
+        except CSGSError as exc:
+            return _error_response(exc)
+
+    @app.custom_route("/api/sessions/{session_id}/turns", methods=["POST"])
+    async def append_session_turn(request: Request) -> Response:
+        try:
+            data = await _json_body(request)
+            turn = _service().append_turn(
+                request.path_params["session_id"],
+                prompt=str(data.get("prompt", "")),
+                output=str(data.get("output", "")),
+            )
+            return JSONResponse(turn_to_dict(turn))
+        except (CSGSError, ValueError, KeyError) as exc:
+            return _error_response(exc)
+
+    @app.custom_route("/api/sessions/{session_id}/trace", methods=["GET"])
+    async def trace_session(request: Request) -> Response:
+        try:
+            return PlainTextResponse(_service().trace_session(request.path_params["session_id"]))
+        except CSGSError as exc:
             return _error_response(exc)
 
     @app.custom_route("/api/runs/{run_id}", methods=["GET"])
@@ -114,6 +168,15 @@ def _tags(value: object) -> list[str] | None:
     if isinstance(value, list):
         return [str(tag) for tag in value]
     raise ValueError("tags must be a list or comma-separated string")
+
+
+def _turn_input(value: object) -> dict[str, str]:
+    if not isinstance(value, dict):
+        raise ValueError("turns must contain objects")
+    return {
+        "prompt": str(value.get("prompt", "")),
+        "output": str(value.get("output", "")),
+    }
 
 
 def _error_response(exc: Exception) -> JSONResponse:

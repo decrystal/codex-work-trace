@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from csgs.models import Run
+from csgs.models import Run, Session, Turn
 from csgs.store import RunStore
 
 
@@ -40,6 +40,34 @@ def run_to_dict(run: Run) -> dict[str, object]:
         "device_id": run.device_id,
         "updated_at": run.updated_at,
         "sync_state": run.sync_state,
+    }
+
+
+def session_to_dict(session: Session) -> dict[str, object]:
+    return {
+        "id": session.id,
+        "parent_id": session.parent_id,
+        "project": session.project,
+        "title": session.title,
+        "summary": session.summary,
+        "tags": session.tags,
+        "summary_turn_index": session.summary_turn_index,
+        "created_at": session.created_at,
+        "updated_at": session.updated_at,
+        "device_id": session.device_id,
+        "sync_state": session.sync_state,
+    }
+
+
+def turn_to_dict(turn: Turn) -> dict[str, object]:
+    return {
+        "id": turn.id,
+        "session_id": turn.session_id,
+        "turn_index": turn.turn_index,
+        "prompt": turn.prompt,
+        "output": turn.output,
+        "summary": turn.summary,
+        "created_at": turn.created_at,
     }
 
 
