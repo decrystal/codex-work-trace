@@ -12,13 +12,31 @@ For local development:
 python -m pip install -e ".[dev]"
 ```
 
-For Codex MCP stdio support:
+For the default local HTTP MCP daemon:
 
 ```bash
-python -m pip install -e ".[dev,mcp]"
+python -m pip install -e ".[dev,server]"
 ```
 
-The core library uses only the Python standard library at runtime. The `mcp` package is optional and only needed when running the stdio MCP server.
+The core CLI and SQLite library use only the Python standard library at runtime. The `mcp` package is optional and needed when running the HTTP or stdio MCP server.
+
+## Local HTTP Daemon
+
+Start the local-first daemon:
+
+```bash
+python -m csgs.cli --db .csgs/csgs.sqlite3 serve \
+  --host 127.0.0.1 \
+  --port 8765 \
+  --transport streamable-http
+```
+
+This exposes:
+
+- `http://127.0.0.1:8765/mcp` for Streamable HTTP MCP clients.
+- `http://127.0.0.1:8765/api/*` for hooks and scripts.
+
+The default host is local-only. Do not expose this daemon publicly without adding authentication.
 
 ## CLI Usage
 
@@ -56,17 +74,14 @@ python -m csgs.cli --db .csgs/csgs.sqlite3 search --text parser --tags refactor 
 
 ## Codex MCP Setup
 
-After installing MCP support, add this to Codex config:
+After installing server support and starting the daemon, add this to Codex config:
 
 ```toml
 [mcp_servers.csgs]
-command = "python"
-args = ["-m", "csgs.mcp_server"]
-cwd = "/Users/decrytal-ade/work/codex-work-trace"
-env = { CSGS_DB = "/Users/decrytal-ade/work/codex-work-trace/.csgs/csgs.sqlite3" }
+url = "http://127.0.0.1:8765/mcp"
 ```
 
-You can also add it with the Codex CLI:
+For stdio MCP instead of the local daemon:
 
 ```bash
 codex mcp add csgs --env CSGS_DB=/Users/decrytal-ade/work/codex-work-trace/.csgs/csgs.sqlite3 -- python -m csgs.mcp_server
@@ -97,6 +112,46 @@ When a task is complete, call the csgs MCP log_run tool with the user's request 
 
 For fully automatic end-of-turn recording, use a Codex lifecycle hook that forwards prompt/output to this logger. This repository exposes the MCP tools and CLI needed by that hook, but does not ship a hook implementation in the MVP.
 
+## Hook-Friendly HTTP API
+
+Hooks and scripts can call plain JSON endpoints without implementing the MCP protocol.
+
+Log a run:
+
+```bash
+curl -s http://127.0.0.1:8765/api/runs \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "id": "A_001",
+    "project": "demo",
+    "prompt": "Refactor the parser",
+    "output": "Changed parser module",
+    "tags": ["refactor"]
+  }'
+```
+
+Trace a run:
+
+```bash
+curl -s http://127.0.0.1:8765/api/runs/A_001/trace
+```
+
+Export one project for sync:
+
+```bash
+curl -s 'http://127.0.0.1:8765/api/sync/export?project=demo'
+```
+
+Import an append-only sync payload:
+
+```bash
+curl -s http://127.0.0.1:8765/api/sync/import \
+  -H 'Content-Type: application/json' \
+  -d @project-sync.json
+```
+
+Import skips existing run IDs and only inserts missing runs.
+
 ## Python API
 
 ```python
@@ -120,6 +175,9 @@ CREATE TABLE IF NOT EXISTS runs (
     output TEXT,
     summary TEXT,
     tags TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    device_id TEXT,
+    updated_at TIMESTAMP,
+    sync_state TEXT DEFAULT 'local'
 );
 ```

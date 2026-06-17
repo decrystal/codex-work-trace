@@ -12,6 +12,7 @@ dependencies = []
 [project.optional-dependencies]
 dev = ["pytest>=7.4"]
 mcp = ["mcp>=1.10"]
+server = ["mcp>=1.10"]
 
 [project.scripts]
 csgs = "csgs.cli:main"

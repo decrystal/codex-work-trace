@@ -111,8 +111,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)
         return 1
-    app.run(transport=args.transport)
-    return 0
+    try:
+        app.run(transport=args.transport)
+        return 0
+    except KeyboardInterrupt:
+        return 130
 
 
 def _build_parser() -> argparse.ArgumentParser:

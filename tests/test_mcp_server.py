@@ -22,3 +22,15 @@ def test_create_mcp_app_uses_http_settings(monkeypatch):
     assert app.settings.host == "127.0.0.1"
     assert app.settings.port == 8765
     assert app.settings.streamable_http_path == "/mcp"
+
+
+def test_mcp_server_main_handles_keyboard_interrupt(monkeypatch):
+    class InterruptingApp:
+        def run(self, transport):
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(mcp_server, "create_mcp_app", lambda host=None, port=None: InterruptingApp())
+
+    result = mcp_server.main(["--transport", "streamable-http"])
+
+    assert result == 130
