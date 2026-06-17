@@ -3,15 +3,86 @@ from __future__ import annotations
 from uuid import uuid4
 
 from csgs.errors import RunAlreadyExistsError, RunNotFoundError
-from csgs.models import Run
+from csgs.models import Run, Session, Turn
 from csgs.store import RunStore
-from csgs.summary import generate_summary
+from csgs.summary import generate_summary, summarize_session_increment
 
 
 class SessionGraphService:
     def __init__(self, store: RunStore):
         self.store = store
         self.store.init_schema()
+
+    def log_session(
+        self,
+        project: str | None,
+        turns: list[dict[str, str]],
+        parent_id: str | None = None,
+        tags: list[str] | None = None,
+        session_id: str | None = None,
+        title: str | None = None,
+    ) -> Session:
+        if parent_id is not None and self.store.get_session(parent_id) is None:
+            raise RunNotFoundError(parent_id)
+
+        chosen_id = session_id or self._new_session_id()
+        if self.store.get_session(chosen_id) is not None:
+            raise RunAlreadyExistsError(chosen_id)
+
+        session = self.store.create_session(
+            Session(
+                id=chosen_id,
+                parent_id=parent_id,
+                project=project,
+                title=title,
+                summary="",
+                tags=tags or [],
+                summary_turn_index=0,
+            )
+        )
+
+        for turn in turns:
+            self.append_turn(
+                session.id,
+                prompt=turn.get("prompt", ""),
+                output=turn.get("output", ""),
+            )
+
+        return self.get_session(session.id)
+
+    def append_turn(self, session_id: str, prompt: str, output: str) -> Turn:
+        session = self.get_session(session_id)
+        turn_index = self.store.next_turn_index(session_id)
+        turn = self.store.create_turn(
+            Turn(
+                id=self._new_turn_id(),
+                session_id=session_id,
+                turn_index=turn_index,
+                prompt=prompt,
+                output=output,
+                summary=generate_summary(prompt, output),
+            )
+        )
+        next_summary = summarize_session_increment(session.summary, turn.summary)
+        self.store.update_session_summary(session_id, next_summary, turn.turn_index)
+        return turn
+
+    def get_session(self, session_id: str) -> Session:
+        session = self.store.get_session(session_id)
+        if session is None:
+            raise RunNotFoundError(session_id)
+        return session
+
+    def list_turns(self, session_id: str) -> list[Turn]:
+        self.get_session(session_id)
+        return self.store.list_turns(session_id)
+
+    def trace_session(self, session_id: str) -> str:
+        target = self.get_session(session_id)
+        root = self._find_session_root(target)
+        lines = [root.id]
+        lines.extend(self._render_session_children(root.id, prefix=""))
+        return "\n".join(lines)
 
     def log_run(
         self,
@@ -86,6 +157,18 @@ class SessionGraphService:
             if self.store.get_run(run_id) is None:
                 return run_id
 
+    def _new_session_id(self) -> str:
+        while True:
+            session_id = f"S_{uuid4().hex[:12]}"
+            if self.store.get_session(session_id) is None:
+                return session_id
+
+    def _new_turn_id(self) -> str:
+        while True:
+            turn_id = f"T_{uuid4().hex[:12]}"
+            if self.store.get_turn(turn_id) is None:
+                return turn_id
+
     def _find_root(self, run: Run) -> Run:
         seen = {run.id}
         current = run
@@ -105,4 +188,25 @@ class SessionGraphService:
             lines.append(f"{prefix} {connector}{child.id}")
             extension = "    " if is_last else "│   "
             lines.extend(self._render_children(child.id, prefix=f"{prefix} {extension}"))
+        return lines
+
+    def _find_session_root(self, session: Session) -> Session:
+        seen = {session.id}
+        current = session
+        while current.parent_id is not None:
+            if current.parent_id in seen:
+                break
+            seen.add(current.parent_id)
+            current = self.get_session(current.parent_id)
+        return current
+
+    def _render_session_children(self, parent_id: str, prefix: str) -> list[str]:
+        children = self.store.get_session_children(parent_id)
+        lines: list[str] = []
+        for index, child in enumerate(children):
+            is_last = index == len(children) - 1
+            connector = "└── " if is_last else "├── "
+            lines.append(f"{prefix} {connector}{child.id}")
+            extension = "    " if is_last else "│   "
+            lines.extend(self._render_session_children(child.id, prefix=f"{prefix} {extension}"))
         return lines
