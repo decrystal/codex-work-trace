@@ -19,9 +19,26 @@ DEFAULT_DB = ".csgs/csgs.sqlite3"
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    service = SessionGraphService(RunStore(args.db))
 
     try:
+        if args.command == "serve":
+            from csgs import mcp_server
+
+            return mcp_server.main(
+                [
+                    "--transport",
+                    args.transport,
+                    "--host",
+                    args.host,
+                    "--port",
+                    str(args.port),
+                    "--db",
+                    args.db,
+                ]
+            )
+
+        service = SessionGraphService(RunStore(args.db))
+
         if args.command == "init":
             print(str(Path(args.db)))
             return 0
@@ -103,6 +120,11 @@ def _build_parser() -> argparse.ArgumentParser:
     search_parser.add_argument("--project")
     search_parser.add_argument("--tags", default="")
 
+    serve_parser = subparsers.add_parser("serve")
+    serve_parser.add_argument("--transport", choices=["stdio", "streamable-http"], default="streamable-http")
+    serve_parser.add_argument("--host", default="127.0.0.1")
+    serve_parser.add_argument("--port", default="8765")
+
     return parser
 
 
@@ -123,6 +145,9 @@ def _run_to_dict(run: Run) -> dict[str, object]:
         "summary": run.summary,
         "tags": run.tags,
         "created_at": run.created_at,
+        "device_id": run.device_id,
+        "updated_at": run.updated_at,
+        "sync_state": run.sync_state,
     }
 
 

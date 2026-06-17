@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
 from pathlib import Path
+from typing import Sequence
 
 from csgs.cli import DEFAULT_DB, _run_to_dict
 from csgs.models import Run
@@ -64,13 +66,24 @@ async def fork_run(
     return _run_to_dict(run)
 
 
-def create_mcp_app():
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 8765
+DEFAULT_MCP_PATH = "/mcp"
+
+
+def create_mcp_app(host: str | None = None, port: int | None = None):
     try:
         from mcp.server.fastmcp import FastMCP
     except ModuleNotFoundError as exc:
         raise RuntimeError("Install MCP support with: python -m pip install -e '.[mcp]'") from exc
 
-    app = FastMCP("csgs", instructions=INSTRUCTIONS)
+    app = FastMCP(
+        "csgs",
+        instructions=INSTRUCTIONS,
+        host=host or os.environ.get("CSGS_HOST", DEFAULT_HOST),
+        port=port or _env_int("CSGS_PORT", DEFAULT_PORT),
+        streamable_http_path=DEFAULT_MCP_PATH,
+    )
 
     app.tool()(log_run)
     app.tool()(get_run)
@@ -84,14 +97,31 @@ def create_mcp_app():
     return app
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+
+    if args.db:
+        os.environ["CSGS_DB"] = args.db
+    os.environ["CSGS_HOST"] = args.host
+    os.environ["CSGS_PORT"] = str(args.port)
+
     try:
-        app = create_mcp_app()
+        app = create_mcp_app(host=args.host, port=args.port)
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)
         return 1
-    app.run()
+    app.run(transport=args.transport)
     return 0
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="python -m csgs.mcp_server")
+    parser.add_argument("--transport", choices=["stdio", "streamable-http"], default="stdio")
+    parser.add_argument("--host", default=os.environ.get("CSGS_HOST", DEFAULT_HOST))
+    parser.add_argument("--port", type=int, default=_env_int("CSGS_PORT", DEFAULT_PORT))
+    parser.add_argument("--db", default=os.environ.get("CSGS_DB"))
+    return parser
 
 
 def _service() -> SessionGraphService:
@@ -100,6 +130,13 @@ def _service() -> SessionGraphService:
 
 def _db_path() -> Path:
     return Path(os.environ.get("CSGS_DB", DEFAULT_DB))
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return int(raw)
 
 
 def _as_json(value: Run | dict[str, object] | list[dict[str, object]] | str) -> str:

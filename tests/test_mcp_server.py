@@ -11,3 +11,14 @@ def test_mcp_log_and_get_run(tmp_path, monkeypatch):
 
     assert created["id"] == "A_001"
     assert fetched["summary"] == created["summary"]
+
+
+def test_create_mcp_app_uses_http_settings(monkeypatch):
+    monkeypatch.setenv("CSGS_HOST", "127.0.0.1")
+    monkeypatch.setenv("CSGS_PORT", "8765")
+
+    app = mcp_server.create_mcp_app()
+
+    assert app.settings.host == "127.0.0.1"
+    assert app.settings.port == 8765
+    assert app.settings.streamable_http_path == "/mcp"
