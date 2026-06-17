@@ -7,15 +7,41 @@ from csgs.store import RunStore
 
 
 def export_project(store: RunStore, project: str) -> dict[str, object]:
+    sessions = store.list_project_sessions(project)
     return {
         "project": project,
         "runs": [run_to_dict(run) for run in store.list_project_runs(project)],
+        "sessions": [session_to_dict(session) for session in sessions],
+        "turns": [
+            turn_to_dict(turn)
+            for session in sessions
+            for turn in store.list_turns(session.id)
+        ],
     }
 
 
 def import_runs(store: RunStore, payload: dict[str, object]) -> dict[str, int]:
     imported = 0
     skipped = 0
+
+    for item in payload.get("sessions", []):
+        session_data = _require_dict(item)
+        session_id = str(session_data["id"])
+        if store.get_session(session_id) is not None:
+            skipped += 1
+            continue
+        store.create_session(session_from_dict(session_data))
+        imported += 1
+
+    for item in payload.get("turns", []):
+        turn_data = _require_dict(item)
+        turn_id = str(turn_data["id"])
+        if store.get_turn(turn_id) is not None:
+            skipped += 1
+            continue
+        store.create_turn(turn_from_dict(turn_data))
+        imported += 1
+
     for item in payload.get("runs", []):
         run_data = _require_dict(item)
         run_id = str(run_data["id"])
@@ -84,6 +110,34 @@ def run_from_dict(data: dict[str, Any]) -> Run:
         device_id=_optional_str(data.get("device_id")),
         updated_at=_optional_str(data.get("updated_at")),
         sync_state=_optional_str(data.get("sync_state")) or "imported",
+    )
+
+
+def session_from_dict(data: dict[str, Any]) -> Session:
+    return Session(
+        id=str(data["id"]),
+        parent_id=_optional_str(data.get("parent_id")),
+        project=_optional_str(data.get("project")),
+        title=_optional_str(data.get("title")),
+        summary=str(data.get("summary", "")),
+        tags=_tags(data.get("tags")),
+        summary_turn_index=int(data.get("summary_turn_index") or 0),
+        created_at=_optional_str(data.get("created_at")),
+        updated_at=_optional_str(data.get("updated_at")),
+        device_id=_optional_str(data.get("device_id")),
+        sync_state=_optional_str(data.get("sync_state")) or "imported",
+    )
+
+
+def turn_from_dict(data: dict[str, Any]) -> Turn:
+    return Turn(
+        id=str(data["id"]),
+        session_id=str(data["session_id"]),
+        turn_index=int(data["turn_index"]),
+        prompt=str(data.get("prompt", "")),
+        output=str(data.get("output", "")),
+        summary=str(data.get("summary", "")),
+        created_at=_optional_str(data.get("created_at")),
     )
 
 

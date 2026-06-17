@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Sequence
 
 from csgs.errors import CSGSError
-from csgs.models import Run
+from csgs.models import Run, Session, Turn
 from csgs.service import SessionGraphService
 from csgs.store import RunStore
 
@@ -78,6 +78,27 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             _print_json([_run_to_dict(run) for run in runs])
             return 0
+        if args.command == "session-log":
+            session = service.log_session(
+                project=args.project,
+                title=args.title,
+                parent_id=args.parent_id,
+                tags=_parse_tags(args.tags),
+                session_id=args.id,
+                turns=[_parse_turn(turn) for turn in args.turn],
+            )
+            _print_json(_session_to_dict(session))
+            return 0
+        if args.command == "turn-append":
+            turn = service.append_turn(args.session_id, prompt=args.prompt, output=args.output)
+            _print_json(_turn_to_dict(turn))
+            return 0
+        if args.command == "session-get":
+            _print_json(_session_to_dict(service.get_session(args.id)))
+            return 0
+        if args.command == "session-trace":
+            print(service.trace_session(args.id))
+            return 0
     except CSGSError as exc:
         print(str(exc), file=sys.stderr)
         return 1
@@ -125,6 +146,30 @@ def _build_parser() -> argparse.ArgumentParser:
     serve_parser.add_argument("--host", default="127.0.0.1")
     serve_parser.add_argument("--port", default="8765")
 
+    session_log_parser = subparsers.add_parser("session-log")
+    session_log_parser.add_argument("--id")
+    session_log_parser.add_argument("--parent-id")
+    session_log_parser.add_argument("--project")
+    session_log_parser.add_argument("--title")
+    session_log_parser.add_argument("--tags", default="")
+    session_log_parser.add_argument(
+        "--turn",
+        action="append",
+        required=True,
+        help="Turn encoded as 'prompt|||output'. May be repeated.",
+    )
+
+    turn_append_parser = subparsers.add_parser("turn-append")
+    turn_append_parser.add_argument("session_id")
+    turn_append_parser.add_argument("--prompt", required=True)
+    turn_append_parser.add_argument("--output", required=True)
+
+    session_get_parser = subparsers.add_parser("session-get")
+    session_get_parser.add_argument("id")
+
+    session_trace_parser = subparsers.add_parser("session-trace")
+    session_trace_parser.add_argument("id")
+
     return parser
 
 
@@ -149,6 +194,41 @@ def _run_to_dict(run: Run) -> dict[str, object]:
         "updated_at": run.updated_at,
         "sync_state": run.sync_state,
     }
+
+
+def _session_to_dict(session: Session) -> dict[str, object]:
+    return {
+        "id": session.id,
+        "parent_id": session.parent_id,
+        "project": session.project,
+        "title": session.title,
+        "summary": session.summary,
+        "tags": session.tags,
+        "summary_turn_index": session.summary_turn_index,
+        "created_at": session.created_at,
+        "updated_at": session.updated_at,
+        "device_id": session.device_id,
+        "sync_state": session.sync_state,
+    }
+
+
+def _turn_to_dict(turn: Turn) -> dict[str, object]:
+    return {
+        "id": turn.id,
+        "session_id": turn.session_id,
+        "turn_index": turn.turn_index,
+        "prompt": turn.prompt,
+        "output": turn.output,
+        "summary": turn.summary,
+        "created_at": turn.created_at,
+    }
+
+
+def _parse_turn(value: str) -> dict[str, str]:
+    if "|||" not in value:
+        raise ValueError("turn must be encoded as 'prompt|||output'")
+    prompt, output = value.split("|||", 1)
+    return {"prompt": prompt, "output": output}
 
 
 def _print_json(value: object) -> None:

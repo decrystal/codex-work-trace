@@ -47,3 +47,46 @@ def test_cli_serve_delegates_to_mcp_server(tmp_path, monkeypatch):
         "--db",
         str(tmp_path / "csgs.sqlite3"),
     ]
+
+
+def test_cli_logs_session_and_appends_turn(tmp_path, capsys):
+    db = tmp_path / "csgs.sqlite3"
+
+    assert (
+        main(
+            [
+                "--db",
+                str(db),
+                "session-log",
+                "--id",
+                "S_001",
+                "--project",
+                "alpha",
+                "--title",
+                "Session model",
+                "--turn",
+                "Design sessions|||Added sessions and turns",
+            ]
+        )
+        == 0
+    )
+    assert (
+        main(
+            [
+                "--db",
+                str(db),
+                "turn-append",
+                "S_001",
+                "--prompt",
+                "Append cheaply",
+                "--output",
+                "Used summary plus new turn summary",
+            ]
+        )
+        == 0
+    )
+    assert main(["--db", str(db), "session-get", "S_001"]) == 0
+
+    captured = capsys.readouterr()
+    assert '"id": "S_001"' in captured.out
+    assert '"summary_turn_index": 2' in captured.out
