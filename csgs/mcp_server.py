@@ -15,9 +15,10 @@ from csgs.sync import session_to_dict, turn_to_dict
 
 
 INSTRUCTIONS = (
-    "CSGS records Codex or LLM coding assistant turns as local run nodes. "
-    "Use log_run after a meaningful assistant turn; it generates the summary automatically. "
-    "parent_id is an origin reference only, not an execution dependency."
+    "CSGS records full Codex or LLM coding assistant sessions as graph nodes. "
+    "Use log_session for a whole chat and append_turn for later user/assistant turns; "
+    "append_turn updates session summary incrementally from the old summary plus the new turn summary. "
+    "parent_id is a session origin reference only, not an execution dependency."
 )
 
 
