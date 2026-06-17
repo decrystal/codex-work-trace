@@ -16,6 +16,8 @@ def test_log_run_generates_summary_and_id(tmp_path):
     assert "search" in run.summary.lower()
     assert len([s for s in run.summary.split(".") if s.strip()]) <= 5
     assert service.get_run(run.id).summary == run.summary
+    assert service.get_session(run.id).summary == run.summary
+    assert len(service.list_turns(run.id)) == 1
 
 
 def test_fork_links_new_run_to_source(tmp_path):

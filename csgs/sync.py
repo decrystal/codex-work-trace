@@ -10,7 +10,8 @@ def export_project(store: RunStore, project: str) -> dict[str, object]:
     sessions = store.list_project_sessions(project)
     return {
         "project": project,
-        "runs": [run_to_dict(run) for run in store.list_project_runs(project)],
+        "runs": [run_to_dict(run) for run in store.list_project_runs(project)]
+        + [_session_as_run_dict(store, session) for session in sessions],
         "sessions": [session_to_dict(session) for session in sessions],
         "turns": [
             turn_to_dict(turn)
@@ -45,7 +46,7 @@ def import_runs(store: RunStore, payload: dict[str, object]) -> dict[str, int]:
     for item in payload.get("runs", []):
         run_data = _require_dict(item)
         run_id = str(run_data["id"])
-        if store.get_run(run_id) is not None:
+        if store.get_run(run_id) is not None or store.get_session(run_id) is not None:
             skipped += 1
             continue
         store.create_run(run_from_dict(run_data))
@@ -94,6 +95,23 @@ def turn_to_dict(turn: Turn) -> dict[str, object]:
         "output": turn.output,
         "summary": turn.summary,
         "created_at": turn.created_at,
+    }
+
+
+def _session_as_run_dict(store: RunStore, session: Session) -> dict[str, object]:
+    turns = store.list_turns(session.id)
+    return {
+        "id": session.id,
+        "parent_id": session.parent_id,
+        "project": session.project,
+        "prompt": "\n\n".join(turn.prompt for turn in turns),
+        "output": "\n\n".join(turn.output for turn in turns),
+        "summary": session.summary,
+        "tags": session.tags,
+        "created_at": session.created_at,
+        "device_id": session.device_id,
+        "updated_at": session.updated_at,
+        "sync_state": session.sync_state,
     }
 
 

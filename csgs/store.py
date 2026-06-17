@@ -171,6 +171,11 @@ class RunStore:
             ).fetchall()
         return [self._row_to_turn(row) for row in rows]
 
+    def list_sessions(self) -> list[Session]:
+        with self._connect() as conn:
+            rows = conn.execute("SELECT * FROM sessions ORDER BY created_at, id").fetchall()
+        return [self._row_to_session(row) for row in rows]
+
     def next_turn_index(self, session_id: str) -> int:
         with self._connect() as conn:
             value = conn.execute(

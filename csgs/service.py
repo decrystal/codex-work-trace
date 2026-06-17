@@ -93,25 +93,31 @@ class SessionGraphService:
         tags: list[str] | None = None,
         run_id: str | None = None,
     ) -> Run:
-        if parent_id is not None and self.store.get_run(parent_id) is None:
+        if (
+            parent_id is not None
+            and self.store.get_session(parent_id) is None
+            and self.store.get_run(parent_id) is None
+        ):
             raise RunNotFoundError(parent_id)
 
         chosen_id = run_id or self._new_run_id()
-        if self.store.get_run(chosen_id) is not None:
+        if self.store.get_session(chosen_id) is not None or self.store.get_run(chosen_id) is not None:
             raise RunAlreadyExistsError(chosen_id)
 
-        run = Run(
-            id=chosen_id,
+        session = self.log_session(
+            session_id=chosen_id,
             parent_id=parent_id,
             project=project,
-            prompt=prompt,
-            output=output,
-            summary=generate_summary(prompt, output),
             tags=tags or [],
+            title=None,
+            turns=[{"prompt": prompt, "output": output}],
         )
-        return self.store.create_run(run)
+        return self._session_to_run(session)
 
     def get_run(self, run_id: str) -> Run:
+        session = self.store.get_session(run_id)
+        if session is not None:
+            return self._session_to_run(session)
         run = self.store.get_run(run_id)
         if run is None:
             raise RunNotFoundError(run_id)
@@ -142,9 +148,25 @@ class SessionGraphService:
         tags: list[str] | None = None,
         project: str | None = None,
     ) -> list[Run]:
-        return self.store.search_runs(text=text, tags=tags, project=project)
+        runs = self.store.search_runs(text=text, tags=tags, project=project)
+        session_runs = [self._session_to_run(session) for session in self.store.list_sessions()]
+        if project is not None:
+            session_runs = [run for run in session_runs if run.project == project]
+        if text:
+            needle = text.lower()
+            session_runs = [
+                run
+                for run in session_runs
+                if needle in run.prompt.lower() or needle in run.output.lower() or needle in run.summary.lower()
+            ]
+        if tags:
+            required = set(tags)
+            session_runs = [run for run in session_runs if required.issubset(set(run.tags))]
+        return runs + session_runs
 
     def trace_run(self, run_id: str) -> str:
+        if self.store.get_session(run_id) is not None:
+            return self.trace_session(run_id)
         target = self.get_run(run_id)
         root = self._find_root(target)
         lines = [root.id]
@@ -154,7 +176,7 @@ class SessionGraphService:
     def _new_run_id(self) -> str:
         while True:
             run_id = f"R_{uuid4().hex[:12]}"
-            if self.store.get_run(run_id) is None:
+            if self.store.get_run(run_id) is None and self.store.get_session(run_id) is None:
                 return run_id
 
     def _new_session_id(self) -> str:
@@ -210,3 +232,21 @@ class SessionGraphService:
             extension = "    " if is_last else "│   "
             lines.extend(self._render_session_children(child.id, prefix=f"{prefix} {extension}"))
         return lines
+
+    def _session_to_run(self, session: Session) -> Run:
+        turns = self.store.list_turns(session.id)
+        prompt = "\n\n".join(turn.prompt for turn in turns)
+        output = "\n\n".join(turn.output for turn in turns)
+        return Run(
+            id=session.id,
+            parent_id=session.parent_id,
+            project=session.project,
+            prompt=prompt,
+            output=output,
+            summary=session.summary,
+            tags=session.tags,
+            created_at=session.created_at,
+            device_id=session.device_id,
+            updated_at=session.updated_at,
+            sync_state=session.sync_state,
+        )
