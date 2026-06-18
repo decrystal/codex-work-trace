@@ -256,7 +256,9 @@ http://127.0.0.1:8765/mcp
 HTTPS domain deployment with Caddy:
 
 ```bash
-CSGS_DOMAIN=csgs.example.com CSGS_TOKEN=your-secret-token \
+CSGS_DOMAIN=csgs.example.com \
+  CSGS_TOKEN=your-secret-token \
+  CSGS_DATA_DIR=/srv/csgs/data \
   docker compose -f compose.yaml -f compose.caddy.yaml up -d --build
 ```
 
@@ -275,7 +277,7 @@ compose.caddy.yaml
 deploy/caddy/Caddyfile
 ```
 
-The Docker image stores SQLite at `/data/csgs.sqlite3`. The default compose file binds the service to host `127.0.0.1` only. The Caddy overlay publishes ports `80` and `443`; set `CSGS_TOKEN` before exposing it.
+The Docker image stores SQLite at `/data/csgs.sqlite3`. With `CSGS_DATA_DIR=/srv/csgs/data`, the host path is `/srv/csgs/data/csgs.sqlite3`. Without `CSGS_DATA_DIR`, Docker uses the named volume `csgs-data`. The default compose file binds the service to host `127.0.0.1` only. The Caddy overlay publishes ports `80` and `443`; set `CSGS_TOKEN` before exposing it.
 
 When `CSGS_TOKEN` is set, `/ui`, `/mcp`, and `/api/*` require a bearer token. `/health` stays open for health checks. Open the query UI with:
 

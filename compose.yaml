@@ -8,7 +8,7 @@ services:
       CSGS_DB: /data/csgs.sqlite3
       CSGS_TOKEN: ${CSGS_TOKEN:-}
     volumes:
-      - csgs-data:/data
+      - ${CSGS_DATA_DIR:-csgs-data}:/data
     ports:
       - "127.0.0.1:8765:8765"
 
