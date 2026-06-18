@@ -45,7 +45,7 @@ csgs install --mode remote --endpoint https://csgs.example.com
 Release installer after binary assets are published:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/decrystal/codex-work-trace/main/install/install.sh | sh -s -- --mode local
+sh install/install.sh --mode local
 ```
 
 For local development from this checkout:
