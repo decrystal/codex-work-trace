@@ -1,9 +1,9 @@
 from csgs.models import Session, Turn
-from csgs.store import RunStore
+from csgs.store import CSGSStore
 
 
 def test_store_persists_session_and_turns(tmp_path):
-    store = RunStore(tmp_path / "csgs.sqlite3")
+    store = CSGSStore(tmp_path / "csgs.sqlite3")
     store.init_schema()
 
     session = store.create_session(
@@ -15,12 +15,14 @@ def test_store_persists_session_and_turns(tmp_path):
             summary="Initial session summary.",
             tags=["architecture"],
             summary_turn_index=1,
+            codex_session_id="codex-session-123",
         )
     )
     first = store.create_turn(
         Turn(
             id="T_001",
             session_id=session.id,
+            codex_session_id=session.codex_session_id,
             turn_index=1,
             prompt="Design the system",
             output="Created the design",
@@ -31,6 +33,7 @@ def test_store_persists_session_and_turns(tmp_path):
         Turn(
             id="T_002",
             session_id=session.id,
+            codex_session_id=session.codex_session_id,
             turn_index=2,
             prompt="Add sync",
             output="Added sync",
@@ -41,6 +44,11 @@ def test_store_persists_session_and_turns(tmp_path):
     updated = store.update_session_summary("S_001", "Updated through turn two.", 2)
 
     assert store.get_session("S_001").summary == "Updated through turn two."
+    assert store.get_session("S_001").codex_session_id == "codex-session-123"
     assert updated.summary_turn_index == 2
     assert [turn.id for turn in store.list_turns("S_001")] == [first.id, second.id]
+    assert [turn.codex_session_id for turn in store.list_turns("S_001")] == [
+        "codex-session-123",
+        "codex-session-123",
+    ]
     assert store.next_turn_index("S_001") == 3

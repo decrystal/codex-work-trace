@@ -2,26 +2,26 @@ from __future__ import annotations
 
 from typing import Any
 
-from csgs.models import Run, Session, Turn
-from csgs.store import RunStore
+from csgs.models import Entry, Session, Turn
+from csgs.remote import get_json, post_json
+from csgs.store import CSGSStore
 
 
-def export_project(store: RunStore, project: str) -> dict[str, object]:
+def export_project(store: CSGSStore, project: str) -> dict[str, object]:
     sessions = store.list_project_sessions(project)
     return {
         "project": project,
-        "runs": [run_to_dict(run) for run in store.list_project_runs(project)]
-        + [_session_as_run_dict(store, session) for session in sessions],
         "sessions": [session_to_dict(session) for session in sessions],
         "turns": [
             turn_to_dict(turn)
             for session in sessions
             for turn in store.list_turns(session.id)
         ],
+        "entries": [entry_to_dict(entry) for entry in store.list_project_entries(project)],
     }
 
 
-def import_runs(store: RunStore, payload: dict[str, object]) -> dict[str, int]:
+def import_sessions(store: CSGSStore, payload: dict[str, object]) -> dict[str, int]:
     imported = 0
     skipped = 0
 
@@ -43,31 +43,23 @@ def import_runs(store: RunStore, payload: dict[str, object]) -> dict[str, int]:
         store.create_turn(turn_from_dict(turn_data))
         imported += 1
 
-    for item in payload.get("runs", []):
-        run_data = _require_dict(item)
-        run_id = str(run_data["id"])
-        if store.get_run(run_id) is not None or store.get_session(run_id) is not None:
+    for item in payload.get("entries", []):
+        entry_data = _require_dict(item)
+        entry_id = str(entry_data["id"])
+        if store.get_entry(entry_id) is not None:
             skipped += 1
             continue
-        store.create_run(run_from_dict(run_data))
+        store.create_entry(entry_from_dict(entry_data))
         imported += 1
+
     return {"imported": imported, "skipped": skipped}
 
 
-def run_to_dict(run: Run) -> dict[str, object]:
-    return {
-        "id": run.id,
-        "parent_id": run.parent_id,
-        "project": run.project,
-        "prompt": run.prompt,
-        "output": run.output,
-        "summary": run.summary,
-        "tags": run.tags,
-        "created_at": run.created_at,
-        "device_id": run.device_id,
-        "updated_at": run.updated_at,
-        "sync_state": run.sync_state,
-    }
+def sync_project_with_remote(store: CSGSStore, endpoint: str, project: str) -> dict[str, object]:
+    pushed = post_json(endpoint, "/api/sync/import", export_project(store, project))
+    remote_payload = get_json(endpoint, "/api/sync/export", {"project": project})
+    pulled = import_sessions(store, remote_payload)
+    return {"pushed": pushed, "pulled": pulled}
 
 
 def session_to_dict(session: Session) -> dict[str, object]:
@@ -75,6 +67,7 @@ def session_to_dict(session: Session) -> dict[str, object]:
         "id": session.id,
         "parent_id": session.parent_id,
         "project": session.project,
+        "codex_session_id": session.codex_session_id,
         "title": session.title,
         "summary": session.summary,
         "tags": session.tags,
@@ -90,6 +83,8 @@ def turn_to_dict(turn: Turn) -> dict[str, object]:
     return {
         "id": turn.id,
         "session_id": turn.session_id,
+        "codex_session_id": turn.codex_session_id,
+        "codex_turn_id": turn.codex_turn_id,
         "turn_index": turn.turn_index,
         "prompt": turn.prompt,
         "output": turn.output,
@@ -98,37 +93,17 @@ def turn_to_dict(turn: Turn) -> dict[str, object]:
     }
 
 
-def _session_as_run_dict(store: RunStore, session: Session) -> dict[str, object]:
-    turns = store.list_turns(session.id)
+def entry_to_dict(entry: Entry) -> dict[str, object]:
     return {
-        "id": session.id,
-        "parent_id": session.parent_id,
-        "project": session.project,
-        "prompt": "\n\n".join(turn.prompt for turn in turns),
-        "output": "\n\n".join(turn.output for turn in turns),
-        "summary": session.summary,
-        "tags": session.tags,
-        "created_at": session.created_at,
-        "device_id": session.device_id,
-        "updated_at": session.updated_at,
-        "sync_state": session.sync_state,
+        "id": entry.id,
+        "project_id": entry.project_id,
+        "session_id": entry.session_id,
+        "device_id": entry.device_id,
+        "kind": entry.kind,
+        "summary": entry.summary,
+        "created_at": entry.created_at,
+        "sync_state": entry.sync_state,
     }
-
-
-def run_from_dict(data: dict[str, Any]) -> Run:
-    return Run(
-        id=str(data["id"]),
-        parent_id=_optional_str(data.get("parent_id")),
-        project=_optional_str(data.get("project")),
-        prompt=str(data.get("prompt", "")),
-        output=str(data.get("output", "")),
-        summary=str(data.get("summary", "")),
-        tags=_tags(data.get("tags")),
-        created_at=_optional_str(data.get("created_at")),
-        device_id=_optional_str(data.get("device_id")),
-        updated_at=_optional_str(data.get("updated_at")),
-        sync_state=_optional_str(data.get("sync_state")) or "imported",
-    )
 
 
 def session_from_dict(data: dict[str, Any]) -> Session:
@@ -136,6 +111,7 @@ def session_from_dict(data: dict[str, Any]) -> Session:
         id=str(data["id"]),
         parent_id=_optional_str(data.get("parent_id")),
         project=_optional_str(data.get("project")),
+        codex_session_id=_optional_str(data.get("codex_session_id") or data.get("codexSessionId")),
         title=_optional_str(data.get("title")),
         summary=str(data.get("summary", "")),
         tags=_tags(data.get("tags")),
@@ -151,6 +127,8 @@ def turn_from_dict(data: dict[str, Any]) -> Turn:
     return Turn(
         id=str(data["id"]),
         session_id=str(data["session_id"]),
+        codex_session_id=_optional_str(data.get("codex_session_id") or data.get("codexSessionId")),
+        codex_turn_id=_optional_str(data.get("codex_turn_id") or data.get("codexTurnId")),
         turn_index=int(data["turn_index"]),
         prompt=str(data.get("prompt", "")),
         output=str(data.get("output", "")),
@@ -159,9 +137,22 @@ def turn_from_dict(data: dict[str, Any]) -> Turn:
     )
 
 
+def entry_from_dict(data: dict[str, Any]) -> Entry:
+    return Entry(
+        id=str(data["id"]),
+        project_id=str(data["project_id"]),
+        session_id=str(data["session_id"]),
+        device_id=_optional_str(data.get("device_id")),
+        kind=str(data.get("kind", "summary")),
+        summary=str(data.get("summary", "")),
+        created_at=_optional_str(data.get("created_at")),
+        sync_state=_optional_str(data.get("sync_state")) or "imported",
+    )
+
+
 def _require_dict(value: object) -> dict[str, Any]:
     if not isinstance(value, dict):
-        raise ValueError("run payload items must be objects")
+        raise ValueError("payload items must be objects")
     return value
 
 

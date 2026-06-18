@@ -1,0 +1,35 @@
+{
+  "name": "csgs-local",
+  "version": "0.1.0",
+  "description": "Local-first CSGS integration for MCP-first Codex session summaries.",
+  "author": {
+    "name": "CSGS"
+  },
+  "homepage": "https://github.com/decrytal-ade/codex-work-trace",
+  "repository": "https://github.com/decrytal-ade/codex-work-trace",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "session-graph",
+    "sqlite"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "CSGS Local",
+    "shortDescription": "Record Codex sessions to local SQLite.",
+    "longDescription": "CSGS Local records Codex coding sessions on demand through MCP-first tools with a CLI fallback. It does not install lifecycle hooks.",
+    "developerName": "CSGS",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/decrytal-ade/codex-work-trace",
+    "privacyPolicyURL": "https://github.com/decrytal-ade/codex-work-trace",
+    "termsOfServiceURL": "https://github.com/decrytal-ade/codex-work-trace",
+    "defaultPrompt": [
+      "Use CSGS Local to summarize and record this session"
+    ],
+    "brandColor": "#2563EB"
+  }
+}

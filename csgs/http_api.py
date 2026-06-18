@@ -6,9 +6,9 @@ from typing import Any
 from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, Response
 
-from csgs.errors import CSGSError
+from csgs.errors import CSGSError, SessionNotFoundError
 from csgs.mcp_server import _db_path, _service
-from csgs.sync import export_project, import_runs, run_to_dict, session_to_dict, turn_to_dict
+from csgs.sync import entry_to_dict, export_project, import_sessions, session_to_dict, turn_to_dict
 
 
 def register_api_routes(app: Any) -> None:
@@ -16,36 +16,18 @@ def register_api_routes(app: Any) -> None:
     async def health(request: Request) -> Response:
         return JSONResponse({"status": "ok", "db": str(_db_path())})
 
-    @app.custom_route("/api/runs", methods=["POST"])
-    async def create_run(request: Request) -> Response:
-        try:
-            data = await _json_body(request)
-            run = _service().log_run(
-                prompt=str(data.get("prompt", "")),
-                output=str(data.get("output", "")),
-                parent_id=_optional_str(data.get("parent_id")),
-                project=_optional_str(data.get("project")),
-                tags=_tags(data.get("tags")),
-                run_id=_optional_str(data.get("id") or data.get("run_id")),
-            )
-            return JSONResponse(run_to_dict(run))
-        except (CSGSError, ValueError, KeyError) as exc:
-            return _error_response(exc)
-
     @app.custom_route("/api/sessions", methods=["POST"])
     async def create_session(request: Request) -> Response:
         try:
             data = await _json_body(request)
-            turns = data.get("turns", [])
-            if not isinstance(turns, list):
-                raise ValueError("turns must be a list")
             session = _service().log_session(
                 project=_optional_str(data.get("project")),
                 title=_optional_str(data.get("title")),
                 parent_id=_optional_str(data.get("parent_id")),
                 tags=_tags(data.get("tags")),
                 session_id=_optional_str(data.get("id") or data.get("session_id")),
-                turns=[_turn_input(turn) for turn in turns],
+                codex_session_id=_codex_session_id(data),
+                turns=_turns(data.get("turns", [])),
             )
             return JSONResponse(session_to_dict(session))
         except (CSGSError, ValueError, KeyError) as exc:
@@ -56,6 +38,23 @@ def register_api_routes(app: Any) -> None:
         try:
             return JSONResponse(session_to_dict(_service().get_session(request.path_params["session_id"])))
         except CSGSError as exc:
+            return _error_response(exc)
+
+    @app.custom_route("/api/sessions/{session_id}/fork", methods=["POST"])
+    async def fork_session(request: Request) -> Response:
+        try:
+            data = await _json_body(request)
+            session = _service().fork_session(
+                request.path_params["session_id"],
+                project=_optional_str(data.get("project")),
+                title=_optional_str(data.get("title")),
+                tags=_tags(data.get("tags")),
+                session_id=_optional_str(data.get("id") or data.get("session_id")),
+                codex_session_id=_codex_session_id(data),
+                turns=_turns(data.get("turns", [])),
+            )
+            return JSONResponse(session_to_dict(session))
+        except (CSGSError, ValueError, KeyError) as exc:
             return _error_response(exc)
 
     @app.custom_route("/api/sessions/{session_id}/turns", methods=["GET"])
@@ -74,6 +73,7 @@ def register_api_routes(app: Any) -> None:
                 request.path_params["session_id"],
                 prompt=str(data.get("prompt", "")),
                 output=str(data.get("output", "")),
+                codex_session_id=_codex_session_id(data) or _optional_str(request.headers.get("x-codex-session-id")),
             )
             return JSONResponse(turn_to_dict(turn))
         except (CSGSError, ValueError, KeyError) as exc:
@@ -86,45 +86,63 @@ def register_api_routes(app: Any) -> None:
         except CSGSError as exc:
             return _error_response(exc)
 
-    @app.custom_route("/api/runs/{run_id}", methods=["GET"])
-    async def get_run(request: Request) -> Response:
-        try:
-            return JSONResponse(run_to_dict(_service().get_run(request.path_params["run_id"])))
-        except CSGSError as exc:
-            return _error_response(exc)
+    @app.custom_route("/api/search", methods=["GET"])
+    async def search_sessions(request: Request) -> Response:
+        sessions = _service().search_sessions(
+            text=request.query_params.get("text"),
+            tags=_tags(request.query_params.get("tags")),
+            project=request.query_params.get("project"),
+        )
+        return JSONResponse([session_to_dict(session) for session in sessions])
 
-    @app.custom_route("/api/runs/{run_id}/fork", methods=["POST"])
-    async def fork_run(request: Request) -> Response:
+    @app.custom_route("/api/entries", methods=["POST"])
+    async def record_entry(request: Request) -> Response:
         try:
             data = await _json_body(request)
-            run = _service().fork_run(
-                source_id=request.path_params["run_id"],
-                prompt=_optional_str(data.get("prompt")),
-                output=_optional_str(data.get("output")),
-                project=_optional_str(data.get("project")),
-                tags=_tags(data.get("tags")),
-                run_id=_optional_str(data.get("id") or data.get("run_id")),
+            entry = _service().record_summary(
+                summary=str(data.get("summary", "")),
+                project_id=_optional_str(data.get("project_id") or data.get("project")),
+                cwd=_optional_str(data.get("cwd")),
+                codex_session_id=_codex_session_id(data),
+                title=_optional_str(data.get("title")),
+                device_id=_optional_str(data.get("device_id")),
+                kind=_optional_str(data.get("kind")) or "summary",
             )
-            return JSONResponse(run_to_dict(run))
+            return JSONResponse(entry_to_dict(entry))
         except (CSGSError, ValueError, KeyError) as exc:
             return _error_response(exc)
 
-    @app.custom_route("/api/runs/{run_id}/trace", methods=["GET"])
-    async def trace_run(request: Request) -> Response:
+    @app.custom_route("/api/entries", methods=["GET"])
+    async def list_entries(request: Request) -> Response:
+        project = request.query_params.get("project") or request.query_params.get("project_id")
+        group = request.query_params.get("group") or request.query_params.get("group_id")
+        session_id = request.query_params.get("session_id")
         try:
-            return PlainTextResponse(_service().trace_run(request.path_params["run_id"]))
+            if group:
+                entries = _service().list_group_entries(group)
+            elif project:
+                entries = _service().list_project_entries(project)
+            elif session_id:
+                entries = _service().list_entries(session_id)
+            else:
+                return JSONResponse({"error": "project, group, or session_id query parameter is required"}, status_code=400)
+            return JSONResponse([entry_to_dict(entry) for entry in entries])
         except CSGSError as exc:
             return _error_response(exc)
 
-    @app.custom_route("/api/search", methods=["GET"])
-    async def search_runs(request: Request) -> Response:
-        tags = _tags(request.query_params.get("tags"))
-        runs = _service().search_runs(
-            text=request.query_params.get("text"),
-            tags=tags,
-            project=request.query_params.get("project"),
-        )
-        return JSONResponse([run_to_dict(run) for run in runs])
+    @app.custom_route("/api/hooks/codex", methods=["POST"])
+    async def ingest_codex_hook(request: Request) -> Response:
+        try:
+            data = await _json_body(request)
+            event = _optional_str(data.get("event"))
+            payload = data.get("payload")
+            if not event:
+                raise ValueError("event is required")
+            if not isinstance(payload, dict):
+                raise ValueError("payload must be an object")
+            return JSONResponse(_service().ingest_codex_hook(event, payload))
+        except (CSGSError, ValueError, KeyError) as exc:
+            return _error_response(exc)
 
     @app.custom_route("/api/sync/export", methods=["GET"])
     async def sync_export(request: Request) -> Response:
@@ -137,7 +155,7 @@ def register_api_routes(app: Any) -> None:
     async def sync_import(request: Request) -> Response:
         try:
             payload = await _json_body(request)
-            return JSONResponse(import_runs(_service().store, payload))
+            return JSONResponse(import_sessions(_service().store, payload))
         except (ValueError, KeyError) as exc:
             return _error_response(exc)
 
@@ -159,6 +177,10 @@ def _optional_str(value: object) -> str | None:
     return text if text else None
 
 
+def _codex_session_id(data: dict[str, Any]) -> str | None:
+    return _optional_str(data.get("codex_session_id") or data.get("codexSessionId"))
+
+
 def _tags(value: object) -> list[str] | None:
     if value is None:
         return None
@@ -168,6 +190,12 @@ def _tags(value: object) -> list[str] | None:
     if isinstance(value, list):
         return [str(tag) for tag in value]
     raise ValueError("tags must be a list or comma-separated string")
+
+
+def _turns(value: object) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        raise ValueError("turns must be a list")
+    return [_turn_input(turn) for turn in value]
 
 
 def _turn_input(value: object) -> dict[str, str]:
@@ -180,5 +208,5 @@ def _turn_input(value: object) -> dict[str, str]:
 
 
 def _error_response(exc: Exception) -> JSONResponse:
-    status_code = 404 if exc.__class__.__name__ == "RunNotFoundError" else 400
+    status_code = 404 if isinstance(exc, SessionNotFoundError) else 400
     return JSONResponse({"error": str(exc)}, status_code=status_code)

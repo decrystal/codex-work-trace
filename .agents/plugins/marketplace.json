@@ -1,0 +1,32 @@
+{
+  "name": "csgs",
+  "interface": {
+    "displayName": "CSGS"
+  },
+  "plugins": [
+    {
+      "name": "csgs-local",
+      "source": {
+        "source": "local",
+        "path": "./plugins/csgs-local"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "csgs-remote",
+      "source": {
+        "source": "local",
+        "path": "./plugins/csgs-remote"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

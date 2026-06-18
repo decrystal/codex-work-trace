@@ -1,0 +1,36 @@
+{
+  "name": "csgs-remote",
+  "version": "0.1.0",
+  "description": "Remote CSGS integration for MCP-first Codex session summaries with automatic sync.",
+  "author": {
+    "name": "CSGS"
+  },
+  "homepage": "https://github.com/decrytal-ade/codex-work-trace",
+  "repository": "https://github.com/decrytal-ade/codex-work-trace",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "session-graph",
+    "mcp",
+    "remote"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "CSGS Remote",
+    "shortDescription": "Record Codex sessions to a remote CSGS server.",
+    "longDescription": "CSGS Remote records Codex coding sessions on demand through MCP-first tools with a CLI fallback. The endpoint is configured by csgs install --mode remote --endpoint.",
+    "developerName": "CSGS",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/decrytal-ade/codex-work-trace",
+    "privacyPolicyURL": "https://github.com/decrytal-ade/codex-work-trace",
+    "termsOfServiceURL": "https://github.com/decrytal-ade/codex-work-trace",
+    "defaultPrompt": [
+      "Use CSGS Remote to summarize and record this session"
+    ],
+    "brandColor": "#0F766E"
+  }
+}

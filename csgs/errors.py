@@ -2,13 +2,13 @@ class CSGSError(Exception):
     """Base error for CSGS operations."""
 
 
-class RunNotFoundError(CSGSError):
-    def __init__(self, run_id: str):
-        super().__init__(f"run not found: {run_id}")
-        self.run_id = run_id
+class SessionNotFoundError(CSGSError):
+    def __init__(self, session_id: str):
+        super().__init__(f"session not found: {session_id}")
+        self.session_id = session_id
 
 
-class RunAlreadyExistsError(CSGSError):
-    def __init__(self, run_id: str):
-        super().__init__(f"run already exists: {run_id}")
-        self.run_id = run_id
+class SessionAlreadyExistsError(CSGSError):
+    def __init__(self, session_id: str):
+        super().__init__(f"session already exists: {session_id}")
+        self.session_id = session_id
