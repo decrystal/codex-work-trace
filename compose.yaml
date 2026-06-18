@@ -1,0 +1,15 @@
+services:
+  csgs:
+    build:
+      context: .
+    image: csgs:local
+    restart: unless-stopped
+    environment:
+      CSGS_DB: /data/csgs.sqlite3
+    volumes:
+      - csgs-data:/data
+    ports:
+      - "127.0.0.1:8765:8765"
+
+volumes:
+  csgs-data:

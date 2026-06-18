@@ -235,6 +235,44 @@ This exposes:
 
 The default host is local-only. Do not expose this daemon publicly without adding authentication.
 
+## Docker Deploy
+
+Local Docker server with SQLite persisted in a named volume:
+
+```bash
+docker compose up -d --build
+curl http://127.0.0.1:8765/health
+```
+
+This starts CSGS at:
+
+```text
+http://127.0.0.1:8765/mcp
+```
+
+HTTPS domain deployment with Caddy:
+
+```bash
+CSGS_DOMAIN=csgs.example.com docker compose -f compose.yaml -f compose.caddy.yaml up -d --build
+```
+
+Then configure Codex remote MCP:
+
+```bash
+csgs install --mode remote --endpoint https://csgs.example.com
+```
+
+Docker files:
+
+```text
+Dockerfile
+compose.yaml
+compose.caddy.yaml
+deploy/caddy/Caddyfile
+```
+
+The Docker image stores SQLite at `/data/csgs.sqlite3`. The default compose file binds the service to host `127.0.0.1` only. The Caddy overlay publishes ports `80` and `443`; use it only on a trusted host or after adding authentication.
+
 Key MCP tools:
 
 ```text

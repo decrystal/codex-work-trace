@@ -1,0 +1,3 @@
+{$CSGS_DOMAIN} {
+  reverse_proxy csgs:8765
+}
