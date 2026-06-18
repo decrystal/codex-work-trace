@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 from urllib.parse import urlencode
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from csgs.config import api_base
+from csgs.config import api_base, load_config
 
 
 def ingest_codex_hook_remote(endpoint: str, event: str, payload: dict[str, object]) -> dict[str, object]:
@@ -13,7 +14,7 @@ def ingest_codex_hook_remote(endpoint: str, event: str, payload: dict[str, objec
     request = Request(
         f"{api_base(endpoint)}/api/hooks/codex",
         data=body,
-        headers={"Content-Type": "application/json"},
+        headers=_headers(content_type="application/json"),
         method="POST",
     )
     try:
@@ -38,7 +39,7 @@ def post_json(endpoint: str, path: str, payload: dict[str, object]) -> dict[str,
     request = Request(
         f"{api_base(endpoint)}{path}",
         data=body,
-        headers={"Content-Type": "application/json"},
+        headers=_headers(content_type="application/json"),
         method="POST",
     )
     return _send_json(request)
@@ -46,8 +47,26 @@ def post_json(endpoint: str, path: str, payload: dict[str, object]) -> dict[str,
 
 def get_json(endpoint: str, path: str, params: dict[str, str]) -> dict[str, object]:
     query = urlencode(params)
-    request = Request(f"{api_base(endpoint)}{path}?{query}", method="GET")
+    request = Request(f"{api_base(endpoint)}{path}?{query}", headers=_headers(), method="GET")
     return _send_json(request)
+
+
+def _headers(*, content_type: str | None = None) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    if content_type:
+        headers["Content-Type"] = content_type
+    token = _configured_token()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
+def _configured_token() -> str | None:
+    env_token = os.environ.get("CSGS_TOKEN", "").strip()
+    if env_token:
+        return env_token
+    config = load_config()
+    return config.token
 
 
 def _send_json(request: Request) -> dict[str, object]:

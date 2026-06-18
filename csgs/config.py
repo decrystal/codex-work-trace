@@ -14,6 +14,7 @@ class CSGSConfig:
     mode: str = "local"
     db: Path | None = None
     endpoint: str | None = None
+    token: str | None = None
 
 
 def csgs_home() -> Path:
@@ -37,11 +38,13 @@ def load_config(path: str | Path | None = None) -> CSGSConfig:
     mode = str(data.get("mode", "local"))
     db_value = data.get("db")
     endpoint_value = data.get("endpoint")
+    token_value = data.get("token")
 
     return CSGSConfig(
         mode=mode,
         db=Path(str(db_value)).expanduser() if db_value else None,
         endpoint=str(endpoint_value).rstrip("/") if endpoint_value else None,
+        token=str(token_value) if token_value else None,
     )
 
 
@@ -50,6 +53,7 @@ def write_config(
     mode: str,
     db_path: str | Path | None = None,
     endpoint: str | None = None,
+    token: str | None = None,
     path: str | Path | None = None,
 ) -> Path:
     if mode not in {"local", "remote"}:
@@ -66,6 +70,8 @@ def write_config(
     lines.append(f'db = "{_toml_string(str(db))}"')
     if mode == "remote":
         lines.append(f'endpoint = "{_toml_string(endpoint.rstrip("/"))}"')
+        if token:
+            lines.append(f'token = "{_toml_string(token)}"')
 
     config_path.write_text("\n".join(lines) + "\n")
     return config_path

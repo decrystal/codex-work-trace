@@ -3,6 +3,7 @@ set -eu
 
 MODE="local"
 ENDPOINT=""
+TOKEN=""
 VERSION="latest"
 REPO="${CSGS_REPO:-decrystal/codex-work-trace}"
 MARKETPLACE_SOURCE="${CSGS_MARKETPLACE_SOURCE:-https://github.com/${REPO}.git}"
@@ -16,6 +17,7 @@ Usage: install.sh [options]
 Options:
   --mode local|remote       Install mode. Default: local
   --endpoint URL            Required for --mode remote
+  --token TOKEN             Bearer token for remote MCP/API access
   --version VERSION         GitHub release version. Default: latest
   --repo OWNER/REPO         GitHub repository. Default: decrystal/codex-work-trace
   --install-dir DIR         Binary install directory. Default: ~/.csgs/bin
@@ -41,6 +43,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --version)
       VERSION="${2:-}"
+      shift 2
+      ;;
+    --token)
+      TOKEN="${2:-}"
       shift 2
       ;;
     --repo)
@@ -144,7 +150,11 @@ fi
 if [ "$MODE" = "local" ]; then
   "$csgs_bin" install --mode local --runtime binary --bin "$csgs_bin"
 else
-  "$csgs_bin" install --mode remote --endpoint "$ENDPOINT" --runtime binary --bin "$csgs_bin"
+  if [ -n "$TOKEN" ]; then
+    "$csgs_bin" install --mode remote --endpoint "$ENDPOINT" --token "$TOKEN" --runtime binary --bin "$csgs_bin"
+  else
+    "$csgs_bin" install --mode remote --endpoint "$ENDPOINT" --runtime binary --bin "$csgs_bin"
+  fi
 fi
 
 case ":$PATH:" in

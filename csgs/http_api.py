@@ -4,17 +4,22 @@ from json import JSONDecodeError
 from typing import Any
 
 from starlette.requests import Request
-from starlette.responses import JSONResponse, PlainTextResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 
 from csgs.errors import CSGSError, SessionNotFoundError
 from csgs.mcp_server import _db_path, _service
 from csgs.sync import entry_to_dict, export_project, import_sessions, session_to_dict, turn_to_dict
+from csgs.ui import render_ui
 
 
 def register_api_routes(app: Any) -> None:
     @app.custom_route("/health", methods=["GET"])
     async def health(request: Request) -> Response:
         return JSONResponse({"status": "ok", "db": str(_db_path())})
+
+    @app.custom_route("/ui", methods=["GET"])
+    async def ui(request: Request) -> Response:
+        return HTMLResponse(render_ui())
 
     @app.custom_route("/api/sessions", methods=["POST"])
     async def create_session(request: Request) -> Response:

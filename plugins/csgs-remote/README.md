@@ -7,7 +7,7 @@ This plugin packages remote CSGS integration for Codex:
 - CLI fallback through `csgs record-summary`
 - local SQLite cache plus automatic project sync when remote mode is configured
 
-It does not install lifecycle hooks. `csgs install --mode remote --endpoint ...` configures the remote Codex MCP server.
+It does not install lifecycle hooks. `csgs install --mode remote --endpoint ... --token ...` configures the remote Codex MCP server.
 
 The remote endpoint is configured outside the plugin:
 
@@ -15,7 +15,7 @@ The remote endpoint is configured outside the plugin:
 git clone git@github.com:decrystal/codex-work-trace.git
 cd codex-work-trace
 python -m pip install -e ".[mcp]"
-csgs install --mode remote --endpoint https://csgs.example.com
+csgs install --mode remote --endpoint https://csgs.example.com --token your-secret-token
 codex plugin marketplace add https://github.com/decrystal/codex-work-trace.git
 codex plugin add csgs-remote@csgs
 ```

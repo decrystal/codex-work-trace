@@ -368,6 +368,34 @@ def test_cli_install_remote_writes_csgs_config_and_remote_mcp(tmp_path, monkeypa
     assert "MCP endpoint: https://csgs.example.com/mcp" in captured.out
 
 
+def test_cli_install_remote_can_write_token_header(tmp_path, monkeypatch):
+    codex_home = tmp_path / "codex-home"
+    csgs_home = tmp_path / "csgs-home"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    monkeypatch.setenv("CSGS_HOME", str(csgs_home))
+
+    assert (
+        main(
+            [
+                "install",
+                "--mode",
+                "remote",
+                "--endpoint",
+                "https://csgs.example.com",
+                "--token",
+                "remote-secret",
+            ]
+        )
+        == 0
+    )
+
+    csgs_config = (csgs_home / "config.toml").read_text()
+    codex_config = (codex_home / "config.toml").read_text()
+    assert 'token = "remote-secret"' in csgs_config
+    assert "[mcp_servers.csgs.headers]" in codex_config
+    assert 'Authorization = "Bearer remote-secret"' in codex_config
+
+
 def test_cli_hook_ingest_records_codex_turn(tmp_path, monkeypatch):
     db = tmp_path / "csgs.sqlite3"
     cwd = tmp_path / "demo-project"

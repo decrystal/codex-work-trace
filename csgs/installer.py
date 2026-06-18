@@ -47,6 +47,7 @@ def install_local(
 def install_remote(
     *,
     endpoint: str,
+    token: str | None = None,
     codex_home: str | Path | None = None,
     runtime: Runtime = "auto",
     binary_path: str | Path | None = None,
@@ -55,10 +56,10 @@ def install_remote(
 ) -> dict[str, str]:
     resolved_runtime, resolved_binary = _resolve_runtime(runtime, binary_path)
 
-    csgs_config_path = write_config(mode="remote", endpoint=endpoint)
+    csgs_config_path = write_config(mode="remote", endpoint=endpoint, token=token)
     codex_config_path = _codex_config_path(codex_home)
     endpoint_url = mcp_endpoint(endpoint)
-    _upsert_remote_mcp_config(codex_config_path, endpoint=endpoint)
+    _upsert_remote_mcp_config(codex_config_path, endpoint=endpoint, token=token)
 
     return {
         "codex_config_path": str(codex_config_path),
@@ -69,6 +70,7 @@ def install_remote(
         "mode": "remote",
         "runtime": resolved_runtime,
         "binary_path": str(resolved_binary) if resolved_binary is not None else "",
+        "token_configured": "true" if token else "",
     }
 
 
@@ -128,12 +130,18 @@ CSGS_DB = "{_toml_string(str(db_path))}"
     path.write_text(f"{stripped}\n\n{block}\n" if stripped else f"{block}\n")
 
 
-def _upsert_remote_mcp_config(path: Path, *, endpoint: str) -> None:
+def _upsert_remote_mcp_config(path: Path, *, endpoint: str, token: str | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     stripped = _remove_toml_table_family(path.read_text() if path.exists() else "", "mcp_servers.csgs").rstrip()
     block = f"""
 [mcp_servers.csgs]
 url = "{_toml_string(mcp_endpoint(endpoint))}"
+""".strip()
+    if token:
+        block = f"""{block}
+
+[mcp_servers.csgs.headers]
+Authorization = "Bearer {_toml_string(token)}"
 """.strip()
     path.write_text(f"{stripped}\n\n{block}\n" if stripped else f"{block}\n")
 

@@ -19,7 +19,7 @@ Use this skill when the user wants to install, verify, or debug remote CSGS inte
 2. Configure remote mode:
 
    ```bash
-   csgs install --mode remote --endpoint https://csgs.example.com
+   csgs install --mode remote --endpoint https://csgs.example.com --token your-secret-token
    ```
 
 3. Confirm local config:

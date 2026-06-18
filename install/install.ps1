@@ -2,6 +2,7 @@ param(
   [ValidateSet("local", "remote")]
   [string] $Mode = "local",
   [string] $Endpoint = "",
+  [string] $Token = "",
   [string] $Version = "latest",
   [string] $Repo = "decrystal/codex-work-trace",
   [string] $InstallDir = "$HOME\.csgs\bin",
@@ -82,7 +83,11 @@ if (-not $SkipPlugin) {
 if ($Mode -eq "local") {
   & $csgsBin install --mode local --runtime binary --bin $csgsBin
 } else {
-  & $csgsBin install --mode remote --endpoint $Endpoint --runtime binary --bin $csgsBin
+  if ([string]::IsNullOrWhiteSpace($Token)) {
+    & $csgsBin install --mode remote --endpoint $Endpoint --runtime binary --bin $csgsBin
+  } else {
+    & $csgsBin install --mode remote --endpoint $Endpoint --token $Token --runtime binary --bin $csgsBin
+  }
 }
 
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")

@@ -37,6 +37,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             else:
                 result = install_remote(
                     endpoint=args.endpoint,
+                    token=args.token,
                     runtime=args.runtime,
                     binary_path=args.binary_path,
                 )
@@ -49,8 +50,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             transport = "stdio" if args.command == "mcp-server" else args.transport
             host = "127.0.0.1" if args.command == "mcp-server" else args.host
             port = "8765" if args.command == "mcp-server" else str(args.port)
-            return mcp_server.main(
-                [
+            forwarded = [
                     "--transport",
                     transport,
                     "--host",
@@ -59,8 +59,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                     port,
                     "--db",
                     str(resolve_db_path(args.db)),
-                ]
-            )
+            ]
+            if getattr(args, "token", None):
+                forwarded.extend(["--token", args.token])
+            return mcp_server.main(forwarded)
 
         if args.command == "init":
             print(str(resolve_db_path(args.db)))
@@ -176,6 +178,7 @@ def _build_parser() -> argparse.ArgumentParser:
     install_parser.add_argument("--runtime", choices=["auto", "binary", "dev-python"], default="auto")
     install_parser.add_argument("--bin", dest="binary_path")
     install_parser.add_argument("--db", dest="install_db")
+    install_parser.add_argument("--token")
 
     subparsers.add_parser("mcp-server")
 
@@ -183,6 +186,7 @@ def _build_parser() -> argparse.ArgumentParser:
     serve_parser.add_argument("--transport", choices=["stdio", "streamable-http"], default="streamable-http")
     serve_parser.add_argument("--host", default="127.0.0.1")
     serve_parser.add_argument("--port", default="8765")
+    serve_parser.add_argument("--token")
 
     record_parser = subparsers.add_parser("record-summary")
     record_parser.add_argument("--summary", required=True)
@@ -378,6 +382,8 @@ def _print_install_result(result: dict[str, str]) -> None:
         print(f"SQLite DB: {result['db_path']}")
     if result.get("mcp_configured"):
         print("Codex MCP: configured")
+    if result.get("token_configured"):
+        print("Token: configured")
     print("Default path is MCP-first. Hooks are not installed by this command.")
 
 

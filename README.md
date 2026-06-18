@@ -39,7 +39,7 @@ csgs install --mode local
 Recommended remote install:
 
 ```bash
-csgs install --mode remote --endpoint https://csgs.example.com
+csgs install --mode remote --endpoint https://csgs.example.com --token "$CSGS_TOKEN"
 ```
 
 Release installer after binary assets are published:
@@ -90,6 +90,9 @@ Codex MCP config for remote mode:
 ```toml
 [mcp_servers.csgs]
 url = "https://csgs.example.com/mcp"
+
+[mcp_servers.csgs.headers]
+Authorization = "Bearer your-secret-token"
 ```
 
 ## Codex Plugin
@@ -110,7 +113,7 @@ codex plugin add csgs-local@csgs
 For remote mode:
 
 ```bash
-csgs install --mode remote --endpoint https://csgs.example.com
+csgs install --mode remote --endpoint https://csgs.example.com --token your-secret-token
 codex plugin marketplace add https://github.com/decrystal/codex-work-trace.git
 codex plugin add csgs-remote@csgs
 ```
@@ -253,13 +256,14 @@ http://127.0.0.1:8765/mcp
 HTTPS domain deployment with Caddy:
 
 ```bash
-CSGS_DOMAIN=csgs.example.com docker compose -f compose.yaml -f compose.caddy.yaml up -d --build
+CSGS_DOMAIN=csgs.example.com CSGS_TOKEN=your-secret-token \
+  docker compose -f compose.yaml -f compose.caddy.yaml up -d --build
 ```
 
 Then configure Codex remote MCP:
 
 ```bash
-csgs install --mode remote --endpoint https://csgs.example.com
+csgs install --mode remote --endpoint https://csgs.example.com --token your-secret-token
 ```
 
 Docker files:
@@ -271,7 +275,19 @@ compose.caddy.yaml
 deploy/caddy/Caddyfile
 ```
 
-The Docker image stores SQLite at `/data/csgs.sqlite3`. The default compose file binds the service to host `127.0.0.1` only. The Caddy overlay publishes ports `80` and `443`; use it only on a trusted host or after adding authentication.
+The Docker image stores SQLite at `/data/csgs.sqlite3`. The default compose file binds the service to host `127.0.0.1` only. The Caddy overlay publishes ports `80` and `443`; set `CSGS_TOKEN` before exposing it.
+
+When `CSGS_TOKEN` is set, `/ui`, `/mcp`, and `/api/*` require a bearer token. `/health` stays open for health checks. Open the query UI with:
+
+```text
+https://csgs.example.com/ui?token=your-secret-token
+```
+
+The UI stores the token in browser local storage and sends it as:
+
+```http
+Authorization: Bearer your-secret-token
+```
 
 Key MCP tools:
 

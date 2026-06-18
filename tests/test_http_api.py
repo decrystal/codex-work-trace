@@ -3,6 +3,50 @@ from starlette.testclient import TestClient
 from csgs.mcp_server import create_mcp_app
 
 
+def test_http_auth_is_disabled_when_token_is_not_configured(tmp_path, monkeypatch):
+    monkeypatch.setenv("CSGS_DB", str(tmp_path / "csgs.sqlite3"))
+    monkeypatch.delenv("CSGS_TOKEN", raising=False)
+    app = create_mcp_app().streamable_http_app()
+    client = TestClient(app)
+
+    response = client.get("/api/search")
+
+    assert response.status_code == 200
+
+
+def test_http_auth_protects_api_ui_and_mcp_when_token_is_configured(tmp_path, monkeypatch):
+    monkeypatch.setenv("CSGS_DB", str(tmp_path / "csgs.sqlite3"))
+    monkeypatch.setenv("CSGS_TOKEN", "secret-token")
+    app = create_mcp_app().streamable_http_app()
+    with TestClient(app) as client:
+        assert client.get("/health").status_code == 200
+        assert client.get("/api/search").status_code == 401
+        assert client.get("/ui").status_code == 401
+        assert client.get("/mcp").status_code == 401
+
+        api = client.get("/api/search", headers={"Authorization": "Bearer secret-token"})
+        ui = client.get("/ui?token=secret-token")
+        mcp = client.get("/mcp", headers={"x-csgs-token": "secret-token"})
+
+        assert api.status_code == 200
+        assert ui.status_code == 200
+        assert "CSGS Explorer" in ui.text
+        assert mcp.status_code != 401
+
+
+def test_ui_page_is_available_without_token_in_local_mode(tmp_path, monkeypatch):
+    monkeypatch.setenv("CSGS_DB", str(tmp_path / "csgs.sqlite3"))
+    monkeypatch.delenv("CSGS_TOKEN", raising=False)
+    app = create_mcp_app().streamable_http_app()
+    client = TestClient(app)
+
+    response = client.get("/ui")
+
+    assert response.status_code == 200
+    assert "CSGS Explorer" in response.text
+    assert "/api/entries" in response.text
+
+
 def test_http_api_has_no_run_routes(tmp_path, monkeypatch):
     monkeypatch.setenv("CSGS_DB", str(tmp_path / "csgs.sqlite3"))
     app = create_mcp_app().streamable_http_app()

@@ -1,6 +1,8 @@
 from csgs.service import SessionGraphService
 from csgs.store import CSGSStore
 from csgs.sync import export_project, import_sessions
+from csgs.config import write_config
+from csgs.remote import get_json
 
 
 def test_export_project_includes_only_sessions_and_turns(tmp_path):
@@ -28,6 +30,34 @@ def test_export_project_includes_only_sessions_and_turns(tmp_path):
     assert payload["sessions"][0]["codex_session_id"] == "codex-alpha"
     assert [turn["session_id"] for turn in payload["turns"]] == ["S_001"]
     assert payload["turns"][0]["codex_session_id"] == "codex-alpha"
+
+
+def test_remote_client_uses_configured_token(tmp_path, monkeypatch):
+    csgs_home = tmp_path / "csgs-home"
+    monkeypatch.setenv("CSGS_HOME", str(csgs_home))
+    monkeypatch.delenv("CSGS_TOKEN", raising=False)
+    write_config(mode="remote", endpoint="https://csgs.example.com", token="sync-secret")
+    captured = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def read(self):
+            return b"{}"
+
+    def fake_urlopen(request, timeout):
+        captured["authorization"] = request.headers.get("Authorization")
+        return FakeResponse()
+
+    monkeypatch.setattr("csgs.remote.urlopen", fake_urlopen)
+
+    get_json("https://csgs.example.com", "/api/sync/export", {"project": "alpha"})
+
+    assert captured["authorization"] == "Bearer sync-secret"
 
 
 def test_import_sessions_imports_sessions_and_turns_append_only(tmp_path):

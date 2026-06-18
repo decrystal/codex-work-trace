@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Sequence
 from urllib.parse import unquote, urlparse
 
+from csgs.auth import CSGSTokenAuthMiddleware
 from csgs.service import SessionGraphService, derive_project
 from csgs.store import CSGSStore
 from csgs.sync import entry_to_dict, session_to_dict, turn_to_dict
@@ -225,7 +226,19 @@ def create_mcp_app(host: str | None = None, port: int | None = None):
     from csgs.http_api import register_api_routes
 
     register_api_routes(app)
+    _wrap_streamable_http_app_with_auth(app)
     return app
+
+
+def _wrap_streamable_http_app_with_auth(app):
+    original = app.streamable_http_app
+
+    def streamable_http_app():
+        starlette_app = original()
+        starlette_app.add_middleware(CSGSTokenAuthMiddleware)
+        return starlette_app
+
+    app.streamable_http_app = streamable_http_app
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -236,6 +249,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         os.environ["CSGS_DB"] = args.db
     os.environ["CSGS_HOST"] = args.host
     os.environ["CSGS_PORT"] = str(args.port)
+    if args.token:
+        os.environ["CSGS_TOKEN"] = args.token
 
     try:
         app = create_mcp_app(host=args.host, port=args.port)
@@ -255,6 +270,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--host", default=os.environ.get("CSGS_HOST", DEFAULT_HOST))
     parser.add_argument("--port", type=int, default=_env_int("CSGS_PORT", DEFAULT_PORT))
     parser.add_argument("--db", default=os.environ.get("CSGS_DB"))
+    parser.add_argument("--token", default=os.environ.get("CSGS_TOKEN"))
     return parser
 
 

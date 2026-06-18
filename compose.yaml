@@ -6,6 +6,7 @@ services:
     restart: unless-stopped
     environment:
       CSGS_DB: /data/csgs.sqlite3
+      CSGS_TOKEN: ${CSGS_TOKEN:-}
     volumes:
       - csgs-data:/data
     ports:
