@@ -202,6 +202,28 @@ class _FakeContext:
         self.client_id = getattr(meta, "client_id", None) if meta is not None else None
 
 
+class _TrackingSession:
+    def __init__(self):
+        self.list_roots_called = False
+
+    async def list_roots(self):
+        self.list_roots_called = True
+        return type("RootsResult", (), {"roots": []})()
+
+
+class _TrackingContext:
+    def __init__(self, *, session, meta=None):
+        self.request_context = _FakeRequestContext(session=session, meta=meta)
+        self.request_id = "req-track"
+        self.client_id = None
+
+
+class _SlowSession:
+    async def list_roots(self):
+        await asyncio.sleep(10)
+        return type("RootsResult", (), {"roots": []})()
+
+
 def test_get_runtime_context_uses_roots_meta_and_project_derivation(tmp_path, monkeypatch):
     db = tmp_path / "csgs.sqlite3"
     project = tmp_path / "project"
@@ -218,6 +240,18 @@ def test_get_runtime_context_uses_roots_meta_and_project_derivation(tmp_path, mo
     assert runtime["codex_session_id"] == "codex-meta-session"
     assert runtime["mcp_request"]["client_id"] == "codex-client"
     assert runtime["roots"] == [{"uri": project.as_uri(), "name": "project"}]
+
+
+def test_get_runtime_context_times_out_slow_roots(tmp_path, monkeypatch):
+    monkeypatch.setenv("CSGS_DB", str(tmp_path / "csgs.sqlite3"))
+    monkeypatch.setenv("CSGS_ROOTS_TIMEOUT", "0.01")
+    ctx = _TrackingContext(session=_SlowSession())
+
+    runtime = asyncio.run(asyncio.wait_for(mcp_server.get_runtime_context(ctx), timeout=0.2))
+
+    assert runtime["roots"] == []
+    assert runtime["cwd"] is None
+    assert runtime["project_id"] is None
 
 
 def test_record_current_session_summary_uses_context_fallbacks(tmp_path, monkeypatch):
@@ -244,6 +278,25 @@ def test_record_current_session_summary_uses_context_fallbacks(tmp_path, monkeyp
     session = store.get_session(recorded["session_id"])
     assert session is not None
     assert session.codex_session_id == "codex-context-thread"
+
+
+def test_record_current_session_summary_with_explicit_windows_cwd_skips_roots(tmp_path, monkeypatch):
+    monkeypatch.setenv("CSGS_DB", str(tmp_path / "csgs.sqlite3"))
+    session = _TrackingSession()
+    ctx = _TrackingContext(session=session)
+
+    recorded = asyncio.run(
+        mcp_server.record_current_session_summary(
+            summary="Recorded from Windows project.",
+            cwd=r"C:\code\media-crawl",
+            codex_session_id="codex-windows",
+            ctx=ctx,
+        )
+    )
+
+    assert session.list_roots_called is False
+    assert recorded["project_id"] == "path:C:/code/media-crawl"
+    assert recorded["runtime_context"]["cwd"] == r"C:\code\media-crawl"
 
 
 def test_mcp_fork_session(tmp_path, monkeypatch):

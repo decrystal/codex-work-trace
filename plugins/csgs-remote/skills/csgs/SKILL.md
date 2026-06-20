@@ -7,9 +7,9 @@ description: Record, summarize, search, trace, or sync Codex Session Graph Syste
 
 When the user asks to record or summarize the current Codex session, prefer the CSGS MCP tools when they are available:
 
-1. Call `get_runtime_context`.
+1. Call `get_runtime_context` when it is responsive and useful.
 2. Write a concise 3-5 sentence summary of the visible session.
-3. Call `record_current_session_summary(summary="<summary>")`.
+3. Call `record_current_session_summary(summary="<summary>", cwd="<current project cwd when known>")`. Passing `cwd` is recommended for Windows or remote MCP clients because it skips MCP root probing.
 4. If remote mode is configured, the server endpoint handles central storage; CLI fallback can also auto-sync.
 5. Return the entry id, session id, Codex session id if available, project id, endpoint or SQLite database path, and sync status if present.
 

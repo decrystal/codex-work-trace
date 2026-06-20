@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -353,6 +354,8 @@ class SessionGraphService:
 def derive_project(cwd: str | None) -> str | None:
     if not cwd:
         return None
+    if os.name != "nt" and _is_windows_absolute_path(cwd):
+        return f"path:{_normalize_windows_path(cwd)}"
     path = Path(cwd).resolve()
     root = _git_output(cwd, "rev-parse", "--show-toplevel")
     if root:
@@ -362,6 +365,14 @@ def derive_project(cwd: str | None) -> str | None:
             return normalized
         return f"path:{Path(root).resolve()}"
     return f"path:{path}"
+
+
+def _is_windows_absolute_path(value: str) -> bool:
+    return len(value) >= 3 and value[0].isalpha() and value[1] == ":" and value[2] in {"\\", "/"}
+
+
+def _normalize_windows_path(value: str) -> str:
+    return value.replace("\\", "/").rstrip("/")
 
 
 def _git_output(cwd: str, *args: str) -> str | None:

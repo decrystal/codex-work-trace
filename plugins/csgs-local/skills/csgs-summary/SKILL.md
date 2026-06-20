@@ -11,9 +11,9 @@ Use this skill when the user asks to record, summarize, search, or trace CSGS se
 
 When the user asks to record or summarize the current Codex session, prefer CSGS MCP tools:
 
-1. Call `get_runtime_context`.
+1. Call `get_runtime_context` when it is responsive and useful.
 2. Write a concise 3-5 sentence summary of the current visible session.
-3. Call `record_current_session_summary(summary="<summary>")`.
+3. Call `record_current_session_summary(summary="<summary>", cwd="<current project cwd when known>")`. Passing `cwd` is recommended for Windows or remote MCP clients because it skips MCP root probing.
 4. Return the CSGS entry id, session id, Codex session id if available, project id, and SQLite database path.
 
 If MCP is unavailable, use the CLI fallback:

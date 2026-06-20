@@ -25,6 +25,8 @@ Project IDs are derived from the current directory:
 
 The default recording flow is MCP-first. Ask Codex to use CSGS; the MCP server instructions tell Codex to call `get_runtime_context` and then `record_current_session_summary`. Each call creates a new `entry` and updates `session.summary` as the latest aggregate summary. CSGS does not rebuild a long transcript every time.
 
+For remote MCP clients, especially Windows clients calling a Linux-hosted CSGS server, pass `cwd` or `project_id` directly when available. `record_current_session_summary` skips MCP root probing when either value is explicit. Root probing is bounded by `CSGS_ROOTS_TIMEOUT` seconds, default `2`, so a stuck MCP roots request cannot consume the full Codex tool timeout.
+
 ## Install
 
 Recommended local install from GitHub source:
@@ -144,7 +146,7 @@ The CSGS MCP server instructions tell Codex to summarize the visible session in 
 
 ```text
 get_runtime_context()
-record_current_session_summary(summary="<summary>")
+record_current_session_summary(summary="<summary>", cwd="<current project cwd when known>")
 ```
 
 The tool returns the entry ID, session ID, Codex session ID when available, project ID, SQLite database path, and runtime context. The CLI command below remains available as a fallback.

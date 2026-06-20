@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import os
 import sys
 from pathlib import Path
@@ -34,6 +35,7 @@ DEFAULT_DB = ".csgs/csgs.sqlite3"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 DEFAULT_MCP_PATH = "/mcp"
+DEFAULT_ROOTS_TIMEOUT = 2.0
 
 
 async def log_session(
@@ -136,14 +138,24 @@ async def record_summary(
 
 async def get_runtime_context(ctx: MCPContext | None = None) -> dict[str, object]:
     """Return CSGS runtime context visible through MCP without mutating storage."""
-    roots = await _list_roots(ctx)
-    cwd = _first_root_path(roots)
-    project_id = derive_project(cwd) if cwd else None
+    return await _runtime_context(ctx)
+
+
+async def _runtime_context(
+    ctx: MCPContext | None = None,
+    *,
+    cwd: str | None = None,
+    project_id: str | None = None,
+    include_roots: bool = True,
+) -> dict[str, object]:
+    roots = await _list_roots(ctx) if include_roots else []
+    resolved_cwd = cwd or _first_root_path(roots)
+    resolved_project_id = project_id or (derive_project(resolved_cwd) if resolved_cwd else None)
     meta = _request_meta(ctx)
     return {
         "db_path": str(_db_path()),
-        "cwd": cwd,
-        "project_id": project_id,
+        "cwd": resolved_cwd,
+        "project_id": resolved_project_id,
         "codex_session_id": _codex_session_id_from_meta(meta),
         "roots": roots,
         "mcp_request": {
@@ -165,7 +177,12 @@ async def record_current_session_summary(
     ctx: MCPContext | None = None,
 ) -> dict[str, object]:
     """Record a summary checkpoint for the current Codex session using MCP context fallbacks."""
-    runtime = await get_runtime_context(ctx)
+    runtime = await _runtime_context(
+        ctx,
+        cwd=cwd,
+        project_id=project_id,
+        include_roots=not (cwd or project_id),
+    )
     resolved_codex_session_id = codex_session_id or _optional_str(runtime.get("codex_session_id"))
     resolved_project_id = project_id or _optional_str(runtime.get("project_id"))
     resolved_cwd = cwd or _optional_str(runtime.get("cwd"))
@@ -289,6 +306,17 @@ def _env_int(name: str, default: int) -> int:
     return int(raw)
 
 
+def _roots_timeout() -> float:
+    raw = os.environ.get("CSGS_ROOTS_TIMEOUT")
+    if raw is None:
+        return DEFAULT_ROOTS_TIMEOUT
+    try:
+        timeout = float(raw)
+    except ValueError:
+        return DEFAULT_ROOTS_TIMEOUT
+    return max(timeout, 0.0)
+
+
 async def _list_roots(ctx: MCPContext | None) -> list[dict[str, object]]:
     if ctx is None:
         return []
@@ -297,7 +325,7 @@ async def _list_roots(ctx: MCPContext | None) -> list[dict[str, object]]:
     if session is None or not hasattr(session, "list_roots"):
         return []
     try:
-        result = await session.list_roots()
+        result = await asyncio.wait_for(session.list_roots(), timeout=_roots_timeout())
     except Exception:
         return []
     roots = getattr(result, "roots", []) or []
@@ -325,7 +353,14 @@ def _file_uri_to_path(uri: str | None) -> str | None:
     parsed = urlparse(uri)
     if parsed.scheme != "file":
         return None
-    return str(Path(unquote(parsed.path)).resolve())
+    path = unquote(parsed.path)
+    if _has_uri_windows_drive(path):
+        return path[1:]
+    return str(Path(path).resolve())
+
+
+def _has_uri_windows_drive(path: str) -> bool:
+    return len(path) >= 4 and path[0] == "/" and path[1].isalpha() and path[2:4] == ":/"
 
 
 def _request_meta(ctx: MCPContext | None) -> dict[str, object]:
